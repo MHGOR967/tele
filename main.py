@@ -407,11 +407,11 @@ async def start_command(event):
                 caption=russian_welcome,
                 buttons=phone_btn
             )
-        elif os.path.exists("vip.mp4"):
+        elif os.path.exists("8219429418779326019.mp4"):
             # الرفع للمرة الأولى فقط، وتخزين الـ file_id في الذاكرة
             sent_msg = await bot.send_file(
                 event.chat_id,
-                "vip.mp4",
+                "8219429418779326019.mp4",
                 caption=russian_welcome,
                 buttons=phone_btn
             )
