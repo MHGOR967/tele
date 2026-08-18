@@ -397,7 +397,7 @@ async def start_command(event):
     if os.path.exists("8219429418779326019.mp4"):
         await bot.send_file(
             event.chat_id,
-            "vip.mp4",
+            "8219429418779326019.mp4",
             caption=russian_welcome,
             buttons=phone_btn
         )
